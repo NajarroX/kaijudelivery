@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kaiju Delivery - Edición Chorrillo Deluxe</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Press Start 2P', monospace; user-select: none; color: white;}
+        
+        #ui-layer { position: absolute; inset: 0; pointer-events: none; padding: 20px; box-sizing: border-box; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        .hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
+        .retroware-box {
+            background-color: rgba(0, 0, 50, 0.85);
+            border: 4px solid #fff;
+            box-shadow: 5px 5px 0px #000, inset 3px 3px 0px rgba(255,255,255,0.2);
+            padding: 15px;
+            position: relative;
+            pointer-events: none;
+        }
+        .retroware-box::before { content: ''; position: absolute; inset: -8px; border: 4px solid #000; pointer-events: none; }
+
+        .stat-group { display: flex; flex-direction: column; gap: 8px; }
+        .stat-label { font-size: 10px; color: #fff; text-shadow: 2px 2px #000; }
+        .stat-value { font-size: 18px; color: #00ff00; text-shadow: 2px 2px #000; }
+        
+        .hp-bar-container { width: 140px; height: 16px; border: 3px solid #fff; background: #440000; position: relative; }
+        #hp-fill { height: 100%; background: #00ff00; width: 100%; transition: width 0.1s; }
+        
+        #chat-box { position: absolute; top: 120px; right: 20px; width: 200px; background: #e5ddd5; border-radius: 8px; padding: 8px; border: 2px solid #128C7E; display: none; flex-direction: column; opacity: 0; transition: opacity 0.3s; pointer-events: none; box-shadow: 4px 4px 0px #000; }
+        .chat-header { color: #075E54; font-size: 7px; margin-bottom: 4px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+        .chat-msg { background: #dcf8c6; padding: 6px; border-radius: 5px; font-size: 9px; color: #000; font-family: sans-serif; font-weight: bold; }
+
+        #minimap-container {
+            width: 130px; height: 130px; bottom: 20px; right: 20px; position: absolute;
+            background-color: rgba(0, 20, 0, 0.85); border: 4px solid #00ff00;
+            box-shadow: 5px 5px 0px #000; overflow: hidden; z-index: 15; pointer-events: auto;
+        }
+        #minimap { width: 100%; height: 100%; position: relative; }
+        .map-dot { position: absolute; width: 4px; height: 4px; transform: translate(-50%, -50%); }
+        #map-player { background-color: #fff; width: 6px; height: 6px; z-index: 5; box-shadow: 0 0 5px #fff;}
+        #map-delivery { background-color: #00ff00; width: 6px; height: 6px; z-index: 4; animation: blink 0.8s infinite;}
+        .map-kaiju { background-color: #ff5252; z-index: 3; }
+        .map-building { background-color: #444; width: 2px; height: 2px; z-index: 2; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        .glitch-active { animation: glitch-anim 0.2s infinite; filter: hue-rotate(90deg) contrast(200%); }
+        @keyframes glitch-anim { 0% { transform: translate(0); } 20% { transform: translate(-5px, 5px); } 100% { transform: translate(0); } }
+
+        #delivery-toast { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); color: #00ff00; font-size: 16px; display: none; z-index: 50; text-shadow: 3px 3px #000; text-align: center;}
+        .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; color: white; padding: 20px;}
+        button { background: #4CAF50; color: white; border: 4px solid #fff; padding: 15px; font-family: 'Press Start 2P'; cursor: pointer; margin-top: 20px; font-size: 10px;}
+        
+        #controls { position: absolute; bottom: 20px; left: 20px; display: none; grid-template-columns: repeat(3, 55px); gap: 10px; pointer-events: all; z-index: 20;}
+        .btn { background: rgba(255,255,255,0.2); border: 2px solid #fff; height: 55px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+        @media (pointer: coarse) { #controls { display: grid; } }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="delivery-toast">¡ENTREGAO!<br>+$100</div>
+        <div class="hud-top">
+            <div class="retroware-box stat-group">
+                <div class="stat-label">MOTORIZADO HP</div>
+                <div class="hp-bar-container"><div id="hp-fill"></div></div>
+                <div id="city-hp" style="color: #ff5252; font-size: 8px;">BARRIO: 100%</div>
+            </div>
+            <div class="retroware-box stat-group" style="text-align: right;">
+                <div class="stat-label">BILLETE</div>
+                <div id="money" class="stat-value">$0</div>
+                <div id="timer" class="stat-value" style="font-size: 14px; color: #ffeb3b;">60s</div>
+            </div>
+        </div>
+        <div id="chat-box">
+            <div class="chat-header">Cliente Encabronao (En línea)</div>
+            <div class="chat-msg" id="chat-msg-text">¿Falta mucho fren?</div>
+        </div>
+        <div id="minimap-container"><div id="minimap"><div id="map-player" class="map-dot"></div><div id="map-delivery" class="map-dot"></div></div></div>
+    </div>
+
+    <div id="controls">
+        <div style="grid-column:2" class="btn" id="b-u">▲</div>
+        <div style="grid-column:1; grid-row:2" class="btn" id="b-l">◀</div>
+        <div style="grid-column:3; grid-row:2" class="btn" id="b-r">▶</div>
+        <div style="grid-column:2; grid-row:3" class="btn" id="b-d">▼</div>
+    </div>
+
+    <div id="start" class="overlay">
+        <h1>KAIJU DELIVERY</h1>
+        <p style="font-size: 8px; margin-top: 10px;">LLEVA EL PEDIDO ANTES DE QUE EL KAIJU SE COMA EL BARRIO</p>
+        <button onclick="initGame()">¡METELE EL SPRINT!</button>
+    </div>
+
+    <div id="over" class="overlay" style="display:none">
+        <h1 id="msg">TE VOLARON</h1>
+        <button onclick="location.reload()">DALE OTRA VEZ</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const MESSAGES = [
+            "¿Falta mucho fren? Ya me dio hambre.",
+            "Oye, veo un bicho gigante en mi calle.",
+            "La app dice que estás cerca, no te veo prro.",
+            "¡Ey! El monstruo me tumbó el techo.",
+            "Si la pizza llega fría no hay propina.",
+            "¡Apresúrate, que esto va a explotar!"
+        ];
+
+        let game = { active: false, hp: 100, money: 0, time: 60, buildings: [], worldSize: 85, debris: [] };
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.Fog(0x0a0a1a, 30, 95); 
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xfff5ee, 1.2);
+        sun.position.set(20, 60, 20);
+        scene.add(sun);
+
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(250, 250), new THREE.MeshLambertMaterial({color: 0x4560FF}));
+        ground.rotation.x = -Math.PI/2;
+        scene.add(ground);
+
+        const player = new THREE.Group();
+        player.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 2.5), new THREE.MeshLambertMaterial({color: 0xff0000})));
+        const pHead = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({color: 0xffdbac}));
+        pHead.position.y = 1.2; player.add(pHead);
+        scene.add(player);
+
+        let kaijus = [], deliveryPoint = null;
+        let kaijuDots = [];
+        const mapScale = 130 / (game.worldSize * 2);
+
+        function createBuildingTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#333'; ctx.fillRect(0,0,64,64);
+            ctx.fillStyle = '#ffeb3b'; 
+            for(let x=8; x<64; x+=16) {
+                for(let y=8; y<64; y+=16) {
+                    if(Math.random() > 0.3) {
+                        ctx.shadowBlur = 5; ctx.shadowColor = "yellow";
+                        ctx.fillRect(x, y, 8, 8);
+                    }
+                }
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        function generateKaijuTexture(config) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = config.color; ctx.fillRect(0,0,128,128);
+            config.eyes.forEach(e => {
+                ctx.fillStyle = '#fff'; ctx.fillRect(e.x, e.y, e.s, e.s);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(e.x + e.s/4, e.y + e.s/4, e.s/2, e.s/2);
+            });
+            ctx.fillStyle = '#000'; ctx.fillRect(32, 80, 64, 5);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        function spawnFallingDebris(pos) {
+            const size = 0.5 + Math.random() * 1.5;
+            const debris = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size, size),
+                new THREE.MeshLambertMaterial({color: 0x666666})
+            );
+            debris.position.set(pos.x + (Math.random()-0.5)*10, 40, pos.z + (Math.random()-0.5)*10);
+            debris.userData = { vy: -0.2 - Math.random()*0.5, active: true };
+            scene.add(debris);
+            game.debris.push(debris);
+        }
+
+        function createKaiju() {
+            const colors = ['#2e7d32', '#4527a0', '#c62828', '#ef6c00'];
+            const color = colors[Math.floor(Math.random()*colors.length)];
+            const eyes = [];
+            const numEyes = 2 + Math.floor(Math.random()*5);
+            for(let i=0; i<numEyes; i++) eyes.push({x: Math.random()*100, y: 20+Math.random()*40, s: 10+Math.random()*15});
+            
+            const tex = generateKaijuTexture({ color, eyes });
+            const h = 20 + Math.random()*10;
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(8, h, 8), new THREE.MeshLambertMaterial({map: tex}));
+            mesh.position.set((Math.random()-0.5)*140, h/2, (Math.random()-0.5)*140);
+            scene.add(mesh);
+
+            const dot = document.createElement('div');
+            dot.className = 'map-dot map-kaiju';
+            document.getElementById('minimap').appendChild(dot);
+            kaijuDots.push(dot);
+
+            return { mesh, target: new THREE.Vector3(), timer: 0 };
+        }
+
+        function updateRadar() {
+            document.getElementById('map-player').style.left = (player.position.x * mapScale + 65) + 'px';
+            document.getElementById('map-player').style.top = (player.position.z * mapScale + 65) + 'px';
+            if(deliveryPoint) {
+                document.getElementById('map-delivery').style.left = (deliveryPoint.position.x * mapScale + 65) + 'px';
+                document.getElementById('map-delivery').style.top = (deliveryPoint.position.z * mapScale + 65) + 'px';
+            }
+            kaijus.forEach((k, i) => {
+                kaijuDots[i].style.left = (k.mesh.position.x * mapScale + 65) + 'px';
+                kaijuDots[i].style.top = (k.mesh.position.z * mapScale + 65) + 'px';
+            });
+        }
+
+        function spawnDelivery() {
+            if(deliveryPoint) scene.remove(deliveryPoint);
+            const activeB = game.buildings.filter(b => b.userData.active);
+            const b = activeB[Math.floor(Math.random()*activeB.length)];
+            deliveryPoint = new THREE.Group();
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(4, 0.4, 8, 24), new THREE.MeshBasicMaterial({color: 0x00ff00}));
+            ring.rotation.x = Math.PI/2;
+            deliveryPoint.add(ring);
+            deliveryPoint.position.set(b.position.x + 8, 0.1, b.position.z);
+            scene.add(deliveryPoint);
+        }
+
+        function createRubble(pos) {
+            const rubbleContainer = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshLambertMaterial({color: 0x222222}));
+            base.rotation.x = -Math.PI/2; base.position.y = 0.05;
+            rubbleContainer.add(base);
+            
+            for(let i=0; i<6; i++) {
+                const dot = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 1.5), new THREE.MeshLambertMaterial({color: 0x444444}));
+                dot.position.set((Math.random()-0.5)*8, 0.25, (Math.random()-0.5)*8);
+                rubbleContainer.add(dot);
+            }
+            rubbleContainer.position.set(pos.x, 0, pos.z);
+            scene.add(rubbleContainer);
+        }
+
+        function buildCity() {
+            const tex = createBuildingTexture();
+            for(let x=-4; x<=4; x++){
+                for(let z=-4; z<=4; z++){
+                    if(Math.abs(x)<1 && Math.abs(z)<1) continue;
+                    const h = 10 + Math.random()*20;
+                    const b = new THREE.Mesh(new THREE.BoxGeometry(8, h, 8), new THREE.MeshLambertMaterial({map: tex}));
+                    b.position.set(x*18, h/2, z*18);
+                    b.userData = { active: true, hp: 100, hits: 0 };
+                    scene.add(b);
+                    game.buildings.push(b);
+                    const dot = document.createElement('div');
+                    dot.className = 'map-dot map-building';
+                    dot.style.left = (x*18*mapScale + 65)+'px'; dot.style.top = (z*18*mapScale + 65)+'px';
+                    document.getElementById('minimap').appendChild(dot);
+                }
+            }
+            spawnDelivery();
+        }
+
+        function showChat() {
+            const chat = document.getElementById('chat-box');
+            document.getElementById('chat-msg-text').innerText = MESSAGES[Math.floor(Math.random()*MESSAGES.length)];
+            chat.style.display = 'flex'; chat.style.opacity = 1;
+            setTimeout(() => { chat.style.opacity = 0; setTimeout(()=>chat.style.display='none', 300); }, 4000);
+        }
+
+        function initGame() {
+            game.active = true;
+            document.getElementById('start').style.display = 'none';
+            buildCity();
+            kaijus = [createKaiju(), createKaiju(), createKaiju()];
+            setInterval(showChat, 8000);
+        }
+
+        const keys = { w:0, a:0, s:0, d:0 };
+        window.onkeydown = e => keys[e.key.toLowerCase()] = 1;
+        window.onkeyup = e => keys[e.key.toLowerCase()] = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(!game.active) return;
+            const dt = 0.016; game.time -= dt;
+
+            let nx = player.position.x + (keys.d - keys.a) * 0.6;
+            let nz = player.position.z + (keys.s - keys.w) * 0.6;
+            
+            let canMove = true;
+            if(nx < -game.worldSize || nx > game.worldSize || nz < -game.worldSize || nz > game.worldSize) canMove = false;
+            for(let b of game.buildings) {
+                if(b.userData.active && Math.abs(nx - b.position.x) < 6 && Math.abs(nz - b.position.z) < 6) canMove = false;
+            }
+            for(let d of game.debris) {
+                if(!d.userData.active && Math.abs(nx - d.position.x) < 2 && Math.abs(nz - d.position.z) < 2) canMove = false;
+            }
+            
+            if(canMove) {
+                player.position.x = nx;
+                player.position.z = nz;
+            }
+            if(keys.w||keys.s||keys.a||keys.d) player.rotation.y = Math.atan2(keys.d-keys.a, keys.s-keys.w);
+
+            if(deliveryPoint && player.position.distanceTo(deliveryPoint.position) < 5) {
+                game.money += 100; game.time += 15; 
+                document.getElementById('delivery-toast').style.display='block';
+                setTimeout(()=>document.getElementById('delivery-toast').style.display='none', 1000);
+                spawnDelivery();
+            }
+
+            game.debris.forEach((d, index) => {
+                if(d.userData.active) {
+                    d.position.y += d.userData.vy;
+                    if(d.position.y <= 0.5) {
+                        d.position.y = 0.5;
+                        d.userData.active = false;
+                        setTimeout(() => { scene.remove(d); game.debris.splice(index, 1); }, 10000);
+                    }
+                }
+            });
+
+            kaijus.forEach(k => {
+                k.timer -= dt;
+                if(k.timer <= 0) { k.target.set((Math.random()-0.5)*150, k.mesh.position.y, (Math.random()-0.5)*150); k.timer = 4; }
+                k.mesh.position.lerp(k.target, 0.005);
+                
+                if(Math.random() > 0.98) spawnFallingDebris(k.mesh.position);
+
+                game.buildings.forEach(b => {
+                    if(b.userData.active && k.mesh.position.distanceTo(b.position) < 10) {
+                        b.userData.hits++;
+                        if(b.userData.hits > 50) {
+                            b.userData.active = false;
+                            createRubble(b.position);
+                            scene.remove(b);
+                        }
+                    }
+                });
+
+                // --- LÓGICA DE COLISIÓN MEJORADA ---
+                const dx = k.mesh.position.x - player.position.x;
+                const dz = k.mesh.position.z - player.position.z;
+                const distance = Math.sqrt(dx*dx + dz*dz);
+                
+                if(distance < 7.5) { // Si estás cerca del Kaiju
+                    game.hp -= 1.0; // El daño ahora es más fuerte para que se note
+                    document.body.classList.add('glitch-active');
+                    setTimeout(()=>document.body.classList.remove('glitch-active'), 80);
+                }
+            });
+
+            updateRadar();
+            const activeB = game.buildings.filter(b => b.userData.active).length;
+            const integrity = Math.round((activeB / game.buildings.length) * 100);
+            
+            document.getElementById('hp-fill').style.width = Math.max(0, game.hp) + "%";
+            document.getElementById('timer').innerText = Math.ceil(game.time) + "s";
+            document.getElementById('money').innerText = "$" + game.money;
+            document.getElementById('city-hp').innerText = "BARRIO: " + integrity + "%";
+
+            if(game.hp <= 0 || game.time <= 0 || integrity <= 0) {
+                game.active = false; document.getElementById('over').style.display = 'flex';
+                if(integrity <= 0) document.getElementById('msg').innerText = "BARRIO DESTRUIDO";
+                else if(game.hp <= 0) document.getElementById('msg').innerText = "MOTO CHATARRA";
+                else if(game.time <= 0) document.getElementById('msg').innerText = "SIN TIEMPO";
+            }
+
+            camera.position.lerp(new THREE.Vector3(player.position.x, 40, player.position.z + 30), 0.05);
+            camera.lookAt(player.position);
+            renderer.render(scene, camera);
+        }
+
+        const bind = (id, k) => {
+            const el = document.getElementById(id);
+            el.ontouchstart = (e) => { e.preventDefault(); keys[k] = 1; };
+            el.ontouchend = (e) => { e.preventDefault(); keys[k] = 0; };
+        };
+        bind('b-u','w'); bind('b-d','s'); bind('b-l','a'); bind('b-r','d');
+        
+        animate();
+    </script>
+</body>
+</html>
